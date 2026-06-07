@@ -23,7 +23,25 @@ with open("q-vercel-latency.json", "r") as f:
     data = json.load(f)
 
 df = pd.DataFrame(data)
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request as StarletteRequest
 
+class ForceCORSMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        if request.method == "OPTIONS":
+            from starlette.responses import Response
+            return Response(status_code=200, headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
+                "Access-Control-Allow-Headers": "*",
+            })
+        response = await call_next(request)
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Methods"] = "POST, GET, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "*"
+        return response
+
+app.add_middleware(ForceCORSMiddleware)
 @app.options("/")
 @app.options("/api/latency")
 async def preflight():

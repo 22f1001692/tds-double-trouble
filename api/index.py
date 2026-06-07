@@ -21,6 +21,7 @@ class QueryPayload(BaseModel):
     threshold_ms: float
 
 @app.post("/")
+@app.post("")
 async def get_metrics(payload: QueryPayload):
     # Locate the bundled telemetry file (checks root and api/ folders)
     base_dir = os.path.dirname(os.path.dirname(__file__))

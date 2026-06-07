@@ -1,5 +1,6 @@
-import os
+# api/index.py
 import json
+import numpy as np
 import pandas as pd
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,47 +9,38 @@ from typing import List
 
 app = FastAPI()
 
-# Enhanced CORS setup as recommended by peers
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_methods=["POST", "GET", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization"],
-    expose_headers=["Access-Control-Allow-Origin"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["*"],
 )
 
 class QueryPayload(BaseModel):
     regions: List[str]
     threshold_ms: float
 
-# Load the telemetry data
+# Load telemetry — must be at root of repo, same level as vercel.json
 with open("q-vercel-latency.json", "r") as f:
     data = json.load(f)
+
 df = pd.DataFrame(data)
 
-@app.api_route("/", methods=["POST", "OPTIONS"])
-@app.api_route("/api/latency", methods=["POST", "OPTIONS"]) # Added to cover potential routes
-async def handle_request(request: Request, payload: QueryPayload = None):
-    # Handle preflight OPTIONS request
-    if request.method == "OPTIONS":
-        return Response(status_code=200)
-    
-    # Process POST request
-    try:
-        # Use a dictionary to store results keyed by region name
-        results = {}
-        for region in payload.regions:
-            region_df = df[df['region'].str.lower() == region.lower()]
-            if region_df.empty:
-                continue
-            
-            # Map the results to the specific region key as expected by the grader
-            results[region.lower()] = {
-                "avg_latency": float(region_df['latency_ms'].mean()),
-                "p95_latency": float(region_df['latency_ms'].quantile(0.95)),
-                "avg_uptime": float(region_df['uptime_pct'].mean()),
-                "breaches": int((region_df['latency_ms'] > payload.threshold_ms).sum())
-            }
-        return results
-    except Exception as e:
-        return {"error": str(e)}
+@app.post("/")
+@app.post("/api/latency")
+async def analyze(payload: QueryPayload):
+    regions_result = {}
+
+    for region in payload.regions:
+        rdf = df[df["region"].str.lower() == region.lower()]
+        if rdf.empty:
+            continue
+
+        regions_result[region.lower()] = {
+            "avg_latency": round(float(rdf["latency_ms"].mean()), 4),
+            "p95_latency": round(float(np.percentile(rdf["latency_ms"], 95)), 4),
+            "avg_uptime":  round(float(rdf["uptime_pct"].mean()), 4),
+            "breaches":    int((rdf["latency_ms"] > payload.threshold_ms).sum()),
+        }
+
+    return {"regions": regions_result}   # ← wrap in "regions" key
